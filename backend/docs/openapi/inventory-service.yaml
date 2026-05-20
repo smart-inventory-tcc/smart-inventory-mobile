@@ -1,0 +1,510 @@
+openapi: 3.0.3
+info:
+  title: Smart Inventory - Inventory and Storage Service API
+  version: 1.0.0
+  description: Service B for item management, stock transactions, and GCS upload.
+servers:
+  - url: https://inventory-service.example.run.app
+    description: Cloud Run (example)
+tags:
+  - name: Items
+  - name: Transactions
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [success, message]
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        details:
+          type: object
+          nullable: true
+    Item:
+      type: object
+      properties:
+        id:
+          type: integer
+        barcode:
+          type: string
+        name:
+          type: string
+        price:
+          type: number
+          format: double
+        stock:
+          type: integer
+        minStock:
+          type: integer
+        categoryId:
+          type: integer
+        supplierId:
+          type: integer
+        imageUrl:
+          type: string
+        isActive:
+          type: boolean
+          description: Soft delete flag. false means item is archived.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ItemCreateRequest:
+      type: object
+      required: [barcode, name, price, stock, minStock, categoryId, supplierId]
+      properties:
+        barcode:
+          type: string
+        name:
+          type: string
+        price:
+          type: number
+          format: double
+        stock:
+          type: integer
+        minStock:
+          type: integer
+        categoryId:
+          type: integer
+        supplierId:
+          type: integer
+        imageFile:
+          type: string
+          description: Base64 encoded image string (e.g. data:image/png;base64,...) to be uploaded to GCS.
+        imageUrl:
+          type: string
+          description: Direct static public URL of the item image (bypasses GCS upload if provided).
+    ItemUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        price:
+          type: number
+          format: double
+        minStock:
+          type: integer
+        categoryId:
+          type: integer
+        supplierId:
+          type: integer
+        imageUrl:
+          type: string
+          description: Direct URL or static link to the image.
+        imageFile:
+          type: string
+          description: Base64 encoded image string to update the image in GCS.
+    TransactionInRequest:
+      type: object
+      required: [itemId, quantity]
+      properties:
+        itemId:
+          type: integer
+        quantity:
+          type: integer
+          minimum: 1
+    TransactionOutRequest:
+      type: object
+      required: [itemId, quantity]
+      properties:
+        itemId:
+          type: integer
+        quantity:
+          type: integer
+          minimum: 1
+        scanSessionId:
+          type: string
+          nullable: true
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: integer
+        itemId:
+          type: integer
+        userId:
+          type: integer
+        type:
+          type: string
+          enum: [IN, OUT]
+        quantity:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+    ItemListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Item"
+    ItemResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/Item"
+    ItemMutationResponse:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+        data:
+          $ref: "#/components/schemas/Item"
+    TransactionInResponse:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Transaction IN recorded
+        data:
+          $ref: "#/components/schemas/Transaction"
+    TransactionOutData:
+      type: object
+      required: [transaction, previousStock, currentStock, lowStockTriggered, lowStockAlertCreated]
+      properties:
+        transaction:
+          $ref: "#/components/schemas/Transaction"
+        previousStock:
+          type: integer
+        currentStock:
+          type: integer
+        lowStockTriggered:
+          type: boolean
+        lowStockAlertCreated:
+          type: boolean
+        lowStockAlertError:
+          type: string
+          nullable: true
+    TransactionOutResponse:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Transaction OUT recorded
+        data:
+          $ref: "#/components/schemas/TransactionOutData"
+    TransactionHistoryResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Transaction"
+paths:
+  /items:
+    get:
+      tags: [Items]
+      summary: Get item list
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Item list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemListResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      tags: [Items]
+      summary: Create item (supports optional image upload URL)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ItemCreateRequest"
+      responses:
+        "201":
+          description: Item created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemMutationResponse"
+        "409":
+          description: Duplicate barcode
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /items/{id}:
+    get:
+      tags: [Items]
+      summary: Get item by id
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Item detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemResponse"
+        "404":
+          description: Item not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      tags: [Items]
+      summary: Update item
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ItemUpdateRequest"
+      responses:
+        "200":
+          description: Item updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemMutationResponse"
+        "404":
+          description: Item not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags: [Items]
+      summary: Delete item (soft delete - archives item)
+      description: Archives an item by setting isActive=false. Item data and transaction history are preserved.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Item archived successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, message]
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        "400":
+          description: Item is already archived
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Item not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /items/barcode/{barcode}:
+    get:
+      tags: [Items]
+      summary: Get item by barcode
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: barcode
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Item detail by barcode
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemResponse"
+        "404":
+          description: Item not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /transactions/in:
+    post:
+      tags: [Transactions]
+      summary: Record stock in
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransactionInRequest"
+      responses:
+        "201":
+          description: Transaction IN recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransactionInResponse"
+        "404":
+          description: Item not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "400":
+          description: Invalid quantity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /transactions/out:
+    post:
+      tags: [Transactions]
+      summary: Record stock out and trigger low-stock alert
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransactionOutRequest"
+      responses:
+        "201":
+          description: Transaction OUT recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransactionOutResponse"
+        "400":
+          description: Invalid quantity or insufficient stock
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Item not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /transactions/history:
+    get:
+      tags: [Transactions]
+      summary: Get transaction history
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Transaction list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransactionHistoryResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"

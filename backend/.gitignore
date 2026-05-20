@@ -1,5 +1,21 @@
 node_modules/
-uploads/
-*.db
 .env
+.env.*
+dist/
+build/
+*.log
 .DS_Store
+Thumbs.db
+
+# GCP Service Account Keys (NEVER commit)
+config/
+**/config/
+*.json
+!package.json
+!package-lock.json
+!prisma/schema.prisma
+config/
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json

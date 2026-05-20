@@ -1,22 +1,25 @@
 {
-  "name": "smart-inventory-backend",
+  "name": "smart-inventory-api",
+  "private": true,
   "version": "1.0.0",
-  "description": "Local Express backend for Smart Inventory UMKM",
-  "main": "app.js",
+  "workspaces": [
+    "services/*"
+  ],
   "scripts": {
-    "start": "node app.js",
-    "dev": "nodemon app.js",
-    "init-db": "node scripts/init-db.js"
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+    "prisma:studio": "prisma studio",
+    "db:seed": "node prisma/seed.js",
+    "docs:swagger": "node scripts/docs/swagger-server.js",
+    "test:smoke": "node scripts/smoke/services-smoke.js",
+    "start:identity": "npm run start -w services/identity-service",
+    "start:inventory": "npm run start -w services/inventory-service",
+    "start:intelligence": "npm run start -w services/intelligence-service"
   },
   "dependencies": {
-    "bcryptjs": "^2.4.3",
-    "cors": "^2.8.5",
-    "express": "^4.18.4",
-    "jsonwebtoken": "^9.0.0",
-    "multer": "^1.4.5-lts.1",
-    "sqlite3": "^5.1.6"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.1"
+    "@prisma/client": "^6.14.0",
+    "bcryptjs": "^3.0.3",
+    "prisma": "^6.14.0"
   }
 }

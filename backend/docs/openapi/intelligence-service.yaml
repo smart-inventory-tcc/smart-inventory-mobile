@@ -1,0 +1,126 @@
+openapi: 3.0.3
+info:
+  title: Smart Inventory - Intelligence and Notifications Service API
+  version: 1.0.0
+  description: Service C for analytics and low-stock alerts feed.
+servers:
+  - url: https://intelligence-service.example.run.app
+    description: Cloud Run (example)
+tags:
+  - name: Analytics
+  - name: Alerts
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [success, message]
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: Unauthorized
+        details:
+          type: object
+          nullable: true
+    SummaryResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            totalItems:
+              type: integer
+            totalSuppliers:
+              type: integer
+            todayIn:
+              type: integer
+            todayOut:
+              type: integer
+            lowStockCount:
+              type: integer
+    LowStockAlert:
+      type: object
+      properties:
+        id:
+          type: string
+        itemId:
+          type: integer
+        itemName:
+          type: string
+        message:
+          type: string
+        level:
+          type: string
+          enum: [warning, danger]
+        isRead:
+          type: boolean
+        timestamp:
+          type: string
+          format: date-time
+    LowStockAlertsResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/LowStockAlert"
+paths:
+  /analytics/summary:
+    get:
+      tags: [Analytics]
+      summary: Get dashboard summary
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Analytics summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SummaryResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /alerts/low-stock:
+    get:
+      tags: [Alerts]
+      summary: Get low-stock alerts feed
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: isRead
+          required: false
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Low stock alerts list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LowStockAlertsResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"

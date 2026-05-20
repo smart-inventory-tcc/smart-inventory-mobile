@@ -1,23 +1,23 @@
 import 'package:flutter/material.dart';
-import '../services/api_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/user.dart';
+import '../services/auth_provider.dart';
 import 'register_screen.dart';
 import 'dashboard_screen.dart';
 
-class LoginScreen extends StatefulWidget {
-  final ApiService apiService;
-
-  const LoginScreen({super.key, required this.apiService});
+class LoginScreen extends ConsumerStatefulWidget {
+  const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen>
+class _LoginScreenState extends ConsumerState<LoginScreen>
     with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
-  final _usernameController = TextEditingController(text: 'owner');
-  final _passwordController = TextEditingController(text: 'password123');
-  bool _isLoading = false;
+  final _usernameController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _obscurePassword = true;
 
   late final AnimationController _animController;
   late final Animation<double> _fadeIn;
@@ -27,9 +27,9 @@ class _LoginScreenState extends State<LoginScreen>
     super.initState();
     _animController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 450),
+      duration: const Duration(milliseconds: 550),
     );
-    _fadeIn = CurvedAnimation(parent: _animController, curve: Curves.easeInOut);
+    _fadeIn = CurvedAnimation(parent: _animController, curve: Curves.easeOut);
     _animController.forward();
   }
 
@@ -41,36 +41,23 @@ class _LoginScreenState extends State<LoginScreen>
     super.dispose();
   }
 
-  void _showError(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
-  }
-
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() => _isLoading = true);
-    final result = await widget.apiService.login(
-      _usernameController.text.trim(),
-      _passwordController.text.trim(),
-    );
-    setState(() => _isLoading = false);
+    await ref.read(authProvider.notifier).loginAction(
+          _usernameController.text.trim(),
+          _passwordController.text.trim(),
+        );
+  }
 
-    if (!result.isSuccess || result.token == null || result.user == null) {
-      if (!mounted) return;
-      _showError(result.error ?? 'Login failed');
-      return;
-    }
-
-    widget.apiService.setToken(result.token!);
-    if (!mounted) return;
+  void _navigateToDashboard(User user) {
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         transitionDuration: const Duration(milliseconds: 450),
-        pageBuilder: (_, __, ___) =>
-            DashboardScreen(apiService: widget.apiService, user: result.user!),
-        transitionsBuilder: (_, a, __, c) =>
+        pageBuilder: (ctx, anim, secondAnim) => DashboardScreen(
+          apiService: ref.read(apiServiceProvider),
+          user: user,
+        ),
+        transitionsBuilder: (ctx, a, secondAnim, c) =>
             FadeTransition(opacity: a, child: c),
       ),
     );
@@ -78,79 +65,194 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    // ── Listen perubahan auth state ───────────────────────────────────────────
+    ref.listen<AsyncValue<User?>>(authProvider, (previous, next) {
+      if (!mounted) return;
+
+      next.when(
+        data: (user) {
+          if (user != null) _navigateToDashboard(user);
+        },
+        loading: () {},
+        error: (e, _) {
+          ScaffoldMessenger.of(context)
+            ..clearSnackBars()
+            ..showSnackBar(SnackBar(content: Text(e.toString())));
+        },
+      );
+    });
+
+    // isLoading: true saat AsyncLoading atau saat state masih awal & ada token
+    final authState = ref.watch(authProvider);
+    final isLoading = authState.isLoading;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Smart Inventory')),
-      body: FadeTransition(
-        opacity: _fadeIn,
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 6),
-                Text('Masuk', style: theme.textTheme.headlineSmall),
-                const SizedBox(height: 18),
-                TextFormField(
-                  controller: _usernameController,
-                  decoration: const InputDecoration(labelText: 'Username'),
-                  validator: (v) => v == null || v.trim().isEmpty
-                      ? 'Username diperlukan'
-                      : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _passwordController,
-                  decoration: const InputDecoration(labelText: 'Password'),
-                  obscureText: true,
-                  validator: (v) =>
-                      v == null || v.isEmpty ? 'Password diperlukan' : null,
-                ),
-                const SizedBox(height: 18),
-                AnimatedScale(
-                  scale: _isLoading ? 0.98 : 1.0,
-                  duration: const Duration(milliseconds: 120),
-                  child: FilledButton(
-                    onPressed: _isLoading ? null : _login,
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : const Text('Login'),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextButton(
-                  onPressed: () {
-                    if (_isLoading) return;
-                    Navigator.of(context).push(
-                      PageRouteBuilder(
-                        transitionDuration: const Duration(milliseconds: 350),
-                        pageBuilder: (_, __, ___) =>
-                            RegisterScreen(apiService: widget.apiService),
-                        transitionsBuilder: (_, a, __, c) =>
-                            FadeTransition(opacity: a, child: c),
+      body: SafeArea(
+        child: FadeTransition(
+          opacity: _fadeIn,
+          child: Center(
+            child: SingleChildScrollView(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // ── Logo / Icon ──────────────────────────────────────────
+                  Center(
+                    child: Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        color: cs.primary.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: cs.primary.withValues(alpha: 0.4),
+                          width: 1.5,
+                        ),
                       ),
-                    );
-                  },
-                  child: const Text('Register akun pegawai baru'),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Default demo account: owner / password123',
-                  style: TextStyle(color: Colors.black54),
-                ),
-              ],
+                      child: Icon(
+                        Icons.inventory_2_rounded,
+                        size: 36,
+                        color: cs.primary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // ── Judul ─────────────────────────────────────────────────
+                  Text(
+                    'Smart Inventory',
+                    style: tt.headlineSmall,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Masuk ke akun Anda',
+                    style: tt.bodyMedium,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 36),
+
+                  // ── Form ──────────────────────────────────────────────────
+                  Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        TextFormField(
+                          controller: _usernameController,
+                          style: TextStyle(color: cs.onSurface),
+                          decoration: const InputDecoration(
+                            labelText: 'Username',
+                            prefixIcon: Icon(Icons.person_outline_rounded),
+                          ),
+                          textInputAction: TextInputAction.next,
+                          validator: (v) =>
+                              v == null || v.trim().isEmpty
+                                  ? 'Username diperlukan'
+                                  : null,
+                        ),
+                        const SizedBox(height: 14),
+                        TextFormField(
+                          controller: _passwordController,
+                          style: TextStyle(color: cs.onSurface),
+                          decoration: InputDecoration(
+                            labelText: 'Password',
+                            prefixIcon:
+                                const Icon(Icons.lock_outline_rounded),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscurePassword
+                                    ? Icons.visibility_off_outlined
+                                    : Icons.visibility_outlined,
+                              ),
+                              onPressed: () => setState(() =>
+                                  _obscurePassword = !_obscurePassword),
+                            ),
+                          ),
+                          obscureText: _obscurePassword,
+                          textInputAction: TextInputAction.done,
+                          onFieldSubmitted: (_) => _login(),
+                          validator: (v) => v == null || v.isEmpty
+                              ? 'Password diperlukan'
+                              : null,
+                        ),
+                        const SizedBox(height: 24),
+
+                        // ── Tombol Login ───────────────────────────────────
+                        AnimatedScale(
+                          scale: isLoading ? 0.97 : 1.0,
+                          duration: const Duration(milliseconds: 120),
+                          child: FilledButton(
+                            onPressed: isLoading ? null : _login,
+                            style: FilledButton.styleFrom(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 15),
+                            ),
+                            child: isLoading
+                                ? const SizedBox(
+                                    height: 18,
+                                    width: 18,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Text('Masuk'),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+
+                        // ── Navigasi ke Register ───────────────────────────
+                        TextButton(
+                          onPressed: isLoading
+                              ? null
+                              : () => Navigator.of(context).push(
+                                    PageRouteBuilder(
+                                      transitionDuration:
+                                          const Duration(milliseconds: 350),
+                                      pageBuilder:
+                                          (ctx, anim, secondAnim) =>
+                                              const RegisterScreen(),
+                                      transitionsBuilder:
+                                          (ctx, a, secondAnim, c) =>
+                                              FadeTransition(
+                                                  opacity: a, child: c),
+                                    ),
+                                  ),
+                          child: const Text(
+                              'Belum punya akun? Daftar di sini'),
+                        ),
+
+                        const SizedBox(height: 20),
+                        Divider(color: cs.outline),
+                        const SizedBox(height: 12),
+
+                        // ── Hint demo ──────────────────────────────────────
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.info_outline_rounded,
+                                size: 14,
+                                color: cs.secondary.withValues(alpha: 0.7)),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Demo: owner / password123',
+                              style: tt.bodyMedium?.copyWith(
+                                color: cs.secondary.withValues(alpha: 0.7),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

@@ -1,0 +1,23 @@
+# Dependencies
+node_modules
+**/node_modules
+npm-debug.log
+yarn-error.log
+
+# Environment and Secrets
+.env
+*.env
+*.json
+!inspiring-rite-489103-t0-aa47c9862dcd.json
+!config/inspiring-rite-489103-t0-aa47c9862dcd.json
+!package.json
+!package-lock.json
+
+# Git
+.git
+.gitignore
+.github
+
+# System Files
+.DS_Store
+Thumbs.db

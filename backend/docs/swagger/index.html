@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Smart Inventory Swagger Preview</title>
+    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            background: #f6f8fb;
+        }
+
+        .topbar {
+            padding: 12px 18px;
+            background: #0b1f3a;
+            color: #fff;
+            font-family: "Segoe UI", Tahoma, sans-serif;
+            font-size: 14px;
+        }
+
+        .topbar strong {
+            font-size: 15px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="topbar">
+        <strong>Smart Inventory API Docs</strong> - Swagger UI local preview
+    </div>
+    <div id="swagger-ui"></div>
+
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+    <script>
+        window.ui = SwaggerUIBundle({
+            dom_id: "#swagger-ui",
+            url: "../openapi/inventory-service.yaml",
+            urls: [
+                { url: "../openapi/identity-service.yaml", name: "Identity Service" },
+                { url: "../openapi/inventory-service.yaml", name: "Inventory Service" },
+                { url: "../openapi/intelligence-service.yaml", name: "Intelligence Service" },
+            ],
+            "urls.primaryName": "Inventory Service",
+            presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+            layout: "StandaloneLayout",
+            deepLinking: true,
+            docExpansion: "list",
+            persistAuthorization: true,
+        });
+    </script>
+</body>
+
+</html>

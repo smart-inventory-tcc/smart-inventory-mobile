@@ -5,7 +5,7 @@ class User {
   final String? name;
   final String? email;
 
-  User({
+  const User({
     required this.id,
     required this.username,
     required this.role,
@@ -13,13 +13,27 @@ class User {
     this.email,
   });
 
+  /// Mendukung tiga bentuk response dari Identity Service:
+  /// 1. Login  : { data: { token, user: { id, username, role } } }
+  /// 2. Profile: { data: { id, username, role, createdAt } }
+  /// 3. Direct : { id, username, role }  ← untuk compat internal
   factory User.fromJson(Map<String, dynamic> json) {
+    final Map<String, dynamic> map;
+    if (json['data'] is Map) {
+      final data = json['data'] as Map<String, dynamic>;
+      // Login response bungkus user di dalam data.user
+      map = data['user'] is Map
+          ? data['user'] as Map<String, dynamic>
+          : data;
+    } else {
+      map = json;
+    }
     return User(
-      id: json['id'] as int,
-      username: json['username'] as String,
-      role: json['role'] as String,
-      name: json['name'] as String?,
-      email: json['email'] as String?,
+      id: map['id'] as int,
+      username: map['username'] as String,
+      role: map['role'] as String,
+      name: map['name'] as String?,
+      email: map['email'] as String?,
     );
   }
 }
