@@ -116,3 +116,37 @@ final scanActionProvider = StateNotifierProvider<ScanActionNotifier, ScanState>(
     return ScanActionNotifier(ref.read(apiServiceProvider), ref);
   },
 );
+
+// ── FutureProvider: Daftar Kategori ──────────────────────────────────────────
+//
+// Dipanggil satu kali saat dashboard terbuka. Data kategori relatif statis
+// sehingga tidak perlu di-invalidate setelah transaksi.
+
+final categoriesProvider = FutureProvider((ref) async {
+  final api = ref.read(apiServiceProvider);
+  return api.getCategories();
+});
+
+// ── StateProvider: Kategori yang Dipilih ─────────────────────────────────────
+//
+// null  → tampilkan semua barang ("Semua Kategori")
+// int   → filter berdasarkan categoryId yang dipilih
+
+final selectedCategoryProvider = StateProvider<int?>((ref) => null);
+
+// ── Computed Provider: Daftar Barang Ter-filter ───────────────────────────────
+//
+// Menggabungkan itemsProvider + selectedCategoryProvider.
+// Filter dilakukan di sisi klien agar tidak perlu network request tambahan.
+
+final filteredItemsProvider = Provider<AsyncValue<List<Item>>>((ref) {
+  final itemsAsync = ref.watch(itemsProvider);
+  final selectedCategoryId = ref.watch(selectedCategoryProvider);
+
+  return itemsAsync.whenData((items) {
+    if (selectedCategoryId == null) return items;
+    return items
+        .where((item) => item.categoryId == selectedCategoryId)
+        .toList();
+  });
+});

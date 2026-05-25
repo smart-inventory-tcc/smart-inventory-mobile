@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/category.dart';
 import '../models/item.dart';
 import '../models/user.dart';
 import '../services/api_service.dart';
@@ -42,6 +43,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
     // Refresh data setelah kembali dari scanner
     ref.invalidate(itemsProvider);
+    ref.invalidate(categoriesProvider);
   }
 
   /// Tampilkan dialog konfirmasi lalu logout
@@ -86,7 +88,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final itemsAsync = ref.watch(itemsProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -94,7 +95,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
-            onPressed: () => ref.invalidate(itemsProvider),
+            onPressed: () {
+              ref.invalidate(itemsProvider);
+              ref.invalidate(categoriesProvider);
+            },
             tooltip: 'Refresh',
           ),
           IconButton(
@@ -175,25 +179,36 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ),
           ),
 
+          // ── Filter Kategori ───────────────────────────────────────────────
+          _CategoryFilterBar(
+            categoriesAsync: ref.watch(categoriesProvider),
+            selectedId: ref.watch(selectedCategoryProvider),
+            onSelect: (id) =>
+                ref.read(selectedCategoryProvider.notifier).state = id,
+            cs: cs,
+            tt: tt,
+          ),
+
           // ── Judul daftar barang ───────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 10),
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('Daftar Barang', style: tt.titleLarge),
-                if (!itemsAsync.isLoading)
-                  Text(
-                    '${itemsAsync.value?.length ?? 0} item',
-                    style: tt.bodyMedium,
-                  ),
+                Builder(builder: (context) {
+                  final filtered = ref.watch(filteredItemsProvider);
+                  final count = filtered.value?.length;
+                  if (count == null) return const SizedBox.shrink();
+                  return Text('$count item', style: tt.bodyMedium);
+                }),
               ],
             ),
           ),
 
-          // ── List Barang ────────────────────────────────────────────────────
+          // ── List Barang (menggunakan filteredItemsProvider) ────────────────
           Expanded(
-            child: ref.watch(itemsProvider).when(
+            child: ref.watch(filteredItemsProvider).when(
               loading: () =>
                   Center(child: CircularProgressIndicator(color: cs.primary)),
               error: (e, _) => _buildError(cs),
@@ -335,9 +350,44 @@ class _ItemCard extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      Text(
-                        'Min: ${item.minStock}',
-                        style: tt.bodyMedium?.copyWith(fontSize: 11),
+                      // ── Stok saat ini + badge Stok Menipis ─────────────
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Stok: ${item.stock}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: isLow
+                                  ? const Color(0xFFFF8C00)
+                                  : cs.onSurface,
+                            ),
+                          ),
+                          if (isLow) ...[
+                            const SizedBox(width: 5),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: cs.error.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: cs.error.withValues(alpha: 0.35),
+                                ),
+                              ),
+                              child: Text(
+                                'Stok Menipis',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: cs.error,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ],
                   ),
@@ -415,4 +465,108 @@ class _ProductImage extends StatelessWidget {
         size: 26,
         color: cs.onSurface.withValues(alpha: 0.3),
       );
+}
+
+// ── Category Filter Bar ───────────────────────────────────────────────────────
+//
+// Horizontal scrollable chip list.
+// Menampilkan "Semua" + nama tiap kategori dari categoriesProvider.
+// Chip yang aktif menggunakan warna primary dari tema.
+
+class _CategoryFilterBar extends StatelessWidget {
+  final AsyncValue<List<Category>> categoriesAsync;
+  final int? selectedId;
+  final ValueChanged<int?> onSelect;
+  final ColorScheme cs;
+  final TextTheme tt;
+
+  const _CategoryFilterBar({
+    required this.categoriesAsync,
+    required this.selectedId,
+    required this.onSelect,
+    required this.cs,
+    required this.tt,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Saat loading kategori, tampilkan shimmer placeholder minimal
+    return categoriesAsync.when(
+      loading: () => const SizedBox(
+        height: 44,
+        child: Center(
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      ),
+      // Jika kategori gagal dimuat, sembunyikan bar (item list tetap muncul)
+      error: (_, err) => const SizedBox.shrink(),
+      data: (categories) {
+        if (categories.isEmpty) return const SizedBox.shrink();
+
+        return Container(
+          height: 44,
+          color: cs.surface,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+            children: [
+              // Chip "Semua Kategori"
+              _buildChip(
+                label: 'Semua',
+                isSelected: selectedId == null,
+                onTap: () => onSelect(null),
+              ),
+              const SizedBox(width: 8),
+              // Chip per kategori
+              ...categories.map((cat) => Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: _buildChip(
+                      label: cat.categoryName,
+                      isSelected: selectedId == cat.id,
+                      onTap: () => onSelect(cat.id),
+                    ),
+                  )),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildChip({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? cs.primary
+              : cs.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? cs.primary : cs.outline,
+            width: isSelected ? 0 : 0.9,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            color: isSelected ? cs.onPrimary : cs.onSurface,
+            letterSpacing: 0.2,
+          ),
+        ),
+      ),
+    );
+  }
 }

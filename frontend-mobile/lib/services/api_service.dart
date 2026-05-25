@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../models/category.dart';
 import '../models/item.dart';
 import '../models/user.dart';
 
@@ -124,6 +125,25 @@ class ApiService {
     } catch (e) {
       if (e is DioException) {
         throw (e.response?.data as Map?)?['message'] ?? 'Gagal memuat supplier';
+      }
+      rethrow;
+    }
+  }
+
+  // ── Categories — Inventory Service ────────────────────────────────────────
+
+  /// GET /categories → { success, data: [ Category ] }
+  /// Throws String on failure (termasuk 401 Unauthorized).
+  Future<List<Category>> getCategories() async {
+    try {
+      final res = await _inventoryDio.get('/categories');
+      return (res.data['data'] as List)
+          .map((e) => Category.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      if (e is DioException) {
+        throw (e.response?.data as Map?)?['message'] ??
+            'Gagal memuat kategori';
       }
       rethrow;
     }
