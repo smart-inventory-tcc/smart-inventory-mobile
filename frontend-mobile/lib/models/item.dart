@@ -59,4 +59,23 @@ class Item {
       isActive: map['isActive'] as bool? ?? true,
     );
   }
+
+  /// Parsing dari Firestore Document Snapshot
+  /// Struktur data dari Firestore diasumsikan persis seperti API JSON.
+  factory Item.fromFirestore(Map<String, dynamic> data, String docId) {
+    return Item(
+      // Jika id di Firestore berupa string, kita tetap simpan sebagai integer sesuai model (fallback ke 0 jika gagal)
+      // Namun, user bilang id di database adalah integer: "id integer"
+      id: _toInt(data['id']),
+      barcode: data['barcode']?.toString() ?? '',
+      name: data['name']?.toString() ?? '',
+      price: _toDouble(data['price']),
+      stock: _toInt(data['stock']),
+      minStock: _toInt(data['minStock']),
+      categoryId: data['categoryId'] != null ? _toInt(data['categoryId']) : null,
+      supplierId: data['supplierId'] != null ? _toInt(data['supplierId']) : null,
+      imageUrl: data['imageUrl']?.toString(),
+      isActive: data['isActive'] as bool? ?? true,
+    );
+  }
 }

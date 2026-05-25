@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/user.dart';
 import 'api_service.dart';
+import 'activity_logger.dart';
 
 // ── Singleton ApiService Provider ────────────────────────────────────────────
 final apiServiceProvider = Provider<ApiService>((ref) => ApiService());
@@ -43,6 +44,14 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       // 2. Ambil data profil lengkap dengan token yang baru
       final user = await _api.getProfile();
       state = AsyncData(user);
+      
+      // Log ke Firestore
+      ActivityLogger.logActivity(
+        userId: user.id,
+        username: user.username,
+        role: user.role,
+        action: 'LOGIN_SUCCESS',
+      );
     } catch (e, st) {
       // e adalah String error dari backend (misal: "Invalid credentials")
       state = AsyncError(e, st);
@@ -52,6 +61,16 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
 
   /// Logout — hapus token dan reset ke null
   Future<void> logout() async {
+    final currentUser = state.value;
+    if (currentUser != null) {
+      ActivityLogger.logActivity(
+        userId: currentUser.id,
+        username: currentUser.username,
+        role: currentUser.role,
+        action: 'LOGOUT',
+      );
+    }
+    
     await _api.clearToken();
     state = const AsyncData(null);
   }

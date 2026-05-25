@@ -1,15 +1,15 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/category.dart';
 import '../models/item.dart';
 import 'api_service.dart';
 import 'auth_provider.dart';
 import 'notification_service.dart';
+import 'activity_logger.dart';
 
-// ── FutureProvider: Daftar semua item ─────────────────────────────────────────
-//
-// Di-refresh ulang dengan ref.invalidate(itemsProvider) setelah transaksi.
-
+// ── FutureProvider: Daftar semua item ─────────────────────────────
 final itemsProvider = FutureProvider<List<Item>>((ref) async {
-  final api = ref.read(apiServiceProvider);
+  final api = ref.watch(apiServiceProvider);
   return api.getItems();
 });
 
@@ -51,6 +51,17 @@ class ScanActionNotifier extends StateNotifier<ScanState> {
     try {
       final item = await _api.getItemByBarcode(barcode);
       state = ScanSuccess(item);
+      
+      final userState = _ref.read(authProvider).value;
+      if (userState != null) {
+        ActivityLogger.logActivity(
+          userId: userState.id,
+          username: userState.username,
+          role: userState.role,
+          action: 'SCAN_BARCODE',
+          metadata: {'barcode': barcode, 'itemName': item.name},
+        );
+      }
     } catch (e) {
       final msg = e.toString();
       if (msg.contains('tidak ditemukan') || msg.contains('404')) {
@@ -64,8 +75,18 @@ class ScanActionNotifier extends StateNotifier<ScanState> {
   /// Barang Masuk — POST /transactions/in
   Future<void> transactionIn(String itemName, int itemId, int qty) async {
     final result = await _api.postTransactionIn(itemId, qty);
-    _ref.invalidate(itemsProvider);
     state = ScanInitial();
+
+    final userState = _ref.read(authProvider).value;
+    if (userState != null) {
+      ActivityLogger.logActivity(
+        userId: userState.id,
+        username: userState.username,
+        role: userState.role,
+        action: 'TRANSACTION_IN',
+        metadata: {'itemId': itemId, 'qty': qty},
+      );
+    }
 
     final stockText = result.newStock != null
         ? ' Stok sekarang ${result.newStock}.'
@@ -84,8 +105,44 @@ class ScanActionNotifier extends StateNotifier<ScanState> {
     int qty,
     String sessionId,
   ) async {
+    final userState = _ref.read(authProvider).value;
+    
+    // Log ke temp_scan_sessions sebelum API call
+    if (userState != null) {
+      await ActivityLogger.logTempScanSession(
+        sessionId: sessionId,
+        userId: userState.id,
+        barcode: itemName, // fallback info
+        itemId: itemId,
+        quantity: qty,
+        lastAction: 'OUT',
+        status: 'PROCESSING',
+      );
+    }
+
     final result = await _api.postTransactionOut(itemId, qty, sessionId);
-    _ref.invalidate(itemsProvider);
+    
+    // Update temp_scan_sessions jadi PROCESSED
+    if (userState != null) {
+      await ActivityLogger.logTempScanSession(
+        sessionId: sessionId,
+        userId: userState.id,
+        barcode: itemName,
+        itemId: itemId,
+        quantity: qty,
+        lastAction: 'OUT',
+        status: 'PROCESSED',
+      );
+      
+      ActivityLogger.logActivity(
+        userId: userState.id,
+        username: userState.username,
+        role: userState.role,
+        action: 'TRANSACTION_OUT',
+        metadata: {'itemId': itemId, 'qty': qty, 'sessionId': sessionId},
+      );
+    }
+
     state = ScanInitial();
 
     final stockText = result.newStock != null
@@ -117,13 +174,9 @@ final scanActionProvider = StateNotifierProvider<ScanActionNotifier, ScanState>(
   },
 );
 
-// ── FutureProvider: Daftar Kategori ──────────────────────────────────────────
-//
-// Dipanggil satu kali saat dashboard terbuka. Data kategori relatif statis
-// sehingga tidak perlu di-invalidate setelah transaksi.
-
-final categoriesProvider = FutureProvider((ref) async {
-  final api = ref.read(apiServiceProvider);
+// ── FutureProvider: Daftar Kategori ───────────────────────────────────────────
+final categoriesProvider = FutureProvider<List<Category>>((ref) async {
+  final api = ref.watch(apiServiceProvider);
   return api.getCategories();
 });
 
@@ -149,4 +202,58 @@ final filteredItemsProvider = Provider<AsyncValue<List<Item>>>((ref) {
         .where((item) => item.categoryId == selectedCategoryId)
         .toList();
   });
+});
+
+// ── StreamProvider: System Config (Real-time) ───────────────────────────────
+
+final systemConfigProvider = StreamProvider<Map<String, dynamic>>((ref) {
+  return FirebaseFirestore.instance
+      .collection('system_config')
+      .snapshots()
+      .map((snapshot) {
+        final Map<String, dynamic> config = {};
+        for (var doc in snapshot.docs) {
+          final data = doc.data();
+          if (data['config_key'] != null) {
+            config[data['config_key'] as String] = data['config_value'];
+          }
+        }
+        return config;
+      });
+});
+
+// ── StreamProvider: Notifications (Real-time) ───────────────────────────────
+
+final notificationsProvider = StreamProvider<List<Map<String, dynamic>>>((ref) {
+  final stream = FirebaseFirestore.instance
+      .collection('notifications')
+      .orderBy('createdAt', descending: true)
+      .snapshots();
+
+  // Listen explicitly to docChanges to trigger Push Notifications for NEW documents only
+  final sub = stream.listen((snapshot) {
+    for (var change in snapshot.docChanges) {
+      if (change.type == DocumentChangeType.added) {
+        final data = change.doc.data();
+        if (data != null && data['isRead'] == false) {
+          final title = data['level'] == 'danger' ? 'Peringatan Kritis!' : 'Notifikasi Sistem';
+          final message = data['message'] ?? 'Ada notifikasi baru.';
+          
+          NotificationService.showNotification(
+            title: title,
+            body: message.toString(),
+          );
+        }
+      }
+    }
+  });
+
+  ref.onDispose(() {
+    sub.cancel();
+  });
+
+  return stream.map((snapshot) => snapshot.docs.map((doc) => {
+    'id': doc.id,
+    ...doc.data(),
+  }).toList());
 });

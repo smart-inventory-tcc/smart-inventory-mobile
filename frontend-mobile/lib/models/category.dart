@@ -18,4 +18,12 @@ class Category {
       description: json['description']?.toString(),
     );
   }
+
+  factory Category.fromFirestore(Map<String, dynamic> data, String docId) {
+    return Category(
+      id: data['id'] as int? ?? 0,
+      categoryName: data['categoryName']?.toString() ?? '',
+      description: data['description']?.toString(),
+    );
+  }
 }

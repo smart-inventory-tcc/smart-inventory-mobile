@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/category.dart';
 import '../models/item.dart';
 import '../models/user.dart';
@@ -41,7 +42,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         builder: (_) => ScanScreen(apiService: widget.apiService),
       ),
     );
-    // Refresh data setelah kembali dari scanner
     ref.invalidate(itemsProvider);
     ref.invalidate(categoriesProvider);
   }
@@ -84,6 +84,97 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
   }
 
+  void _showNotificationsSheet(BuildContext context, List<Map<String, dynamic>> notifs) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.6,
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Notifikasi', style: Theme.of(context).textTheme.titleLarge),
+              if (notifs.any((n) => n['isRead'] == false)) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () {
+                      final unreadNotifs = notifs.where((n) => n['isRead'] == false);
+                      final batch = FirebaseFirestore.instance.batch();
+                      for (var n in unreadNotifs) {
+                        final docRef = FirebaseFirestore.instance.collection('notifications').doc(n['id'] as String);
+                        batch.update(docRef, {'isRead': true});
+                      }
+                      batch.commit();
+                    },
+                    icon: const Icon(Icons.done_all_rounded, size: 18),
+                    label: const Text('Tandai semua dibaca'),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+              Expanded(
+                child: notifs.isEmpty
+                    ? const Center(child: Text('Tidak ada notifikasi.'))
+                    : ListView.builder(
+                        itemCount: notifs.length,
+                        itemBuilder: (context, index) {
+                          final n = notifs[index];
+                          final isRead = n['isRead'] as bool? ?? false;
+                          final docId = n['id'] as String;
+                          
+                          return ListTile(
+                            leading: Icon(
+                              n['level'] == 'danger' ? Icons.warning_rounded : Icons.info_rounded,
+                              color: n['level'] == 'danger' ? Colors.red : Colors.blue,
+                            ),
+                            title: Text(n['itemName']?.toString() ?? 'Peringatan'),
+                            subtitle: Text(n['message']?.toString() ?? ''),
+                            trailing: isRead ? null : const CircleAvatar(radius: 4, backgroundColor: Colors.red),
+                            onTap: () {
+                              if (!isRead) {
+                                FirebaseFirestore.instance
+                                    .collection('notifications')
+                                    .doc(docId)
+                                    .update({'isRead': true});
+                              }
+                            },
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildNotificationIcon(BuildContext context) {
+    final asyncNotifs = ref.watch(notificationsProvider);
+    
+    return asyncNotifs.maybeWhen(
+      data: (notifs) {
+        final unreadCount = notifs.where((n) => n['isRead'] == false).length;
+        return IconButton(
+          icon: Badge(
+            isLabelVisible: unreadCount > 0,
+            label: Text(unreadCount.toString()),
+            child: const Icon(Icons.notifications_rounded),
+          ),
+          onPressed: () => _showNotificationsSheet(context, notifs),
+        );
+      },
+      orElse: () => IconButton(
+        icon: const Icon(Icons.notifications_rounded),
+        onPressed: () {},
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -101,6 +192,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             },
             tooltip: 'Refresh',
           ),
+          _buildNotificationIcon(context),
           IconButton(
             icon: const Icon(Icons.logout_rounded),
             onPressed: _logout,
@@ -189,6 +281,36 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             tt: tt,
           ),
 
+          // ── Config Banner (Promo/Peringatan) ────────────────────────────────
+          Consumer(
+            builder: (context, ref, child) {
+              final configAsync = ref.watch(systemConfigProvider);
+              return configAsync.when(
+                data: (config) {
+                  final bannerText = config['promo_banner']?.toString();
+                  if (bannerText == null || bannerText.isEmpty) {
+                    return const SizedBox.shrink();
+                  }
+                  return Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: cs.primaryContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      bannerText,
+                      style: TextStyle(color: cs.onPrimaryContainer, fontWeight: FontWeight.bold),
+                    ),
+                  );
+                },
+                loading: () => const SizedBox.shrink(),
+                error: (_, err) => const SizedBox.shrink(),
+              );
+            },
+          ),
+          
           // ── Judul daftar barang ───────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
@@ -244,7 +366,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           Text('Gagal memuat data barang', style: TextStyle(color: cs.error)),
           const SizedBox(height: 14),
           TextButton.icon(
-            onPressed: () => ref.invalidate(itemsProvider),
+            onPressed: () {
+              ref.invalidate(itemsProvider);
+              ref.invalidate(categoriesProvider);
+            },
             icon: const Icon(Icons.refresh_rounded),
             label: const Text('Coba lagi'),
           ),
@@ -355,7 +480,7 @@ class _ItemCard extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            'Stok: ${item.stock}',
+                            'Stok: ${item.stock} (Min: ${item.minStock})',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,

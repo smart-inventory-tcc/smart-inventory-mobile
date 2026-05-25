@@ -130,25 +130,6 @@ class ApiService {
     }
   }
 
-  // ── Categories — Inventory Service ────────────────────────────────────────
-
-  /// GET /categories → { success, data: [ Category ] }
-  /// Throws String on failure (termasuk 401 Unauthorized).
-  Future<List<Category>> getCategories() async {
-    try {
-      final res = await _inventoryDio.get('/categories');
-      return (res.data['data'] as List)
-          .map((e) => Category.fromJson(e as Map<String, dynamic>))
-          .toList();
-    } catch (e) {
-      if (e is DioException) {
-        throw (e.response?.data as Map?)?['message'] ??
-            'Gagal memuat kategori';
-      }
-      rethrow;
-    }
-  }
-
   // ── Inventory Dio — sama dengan Identity, beda base URL ──────────────────
 
   Dio _buildInventoryDio() {
@@ -178,18 +159,27 @@ class ApiService {
 
   // ── Items — Inventory Service ─────────────────────────────────────────────
 
-  /// GET /items → { success, data: [ Item ] }
-  /// Throws String on failure.
   Future<List<Item>> getItems() async {
     try {
       final res = await _inventoryDio.get('/items');
-      final list = (res.data['data'] as List)
-          .map((e) => Item.fromJson(e as Map<String, dynamic>))
-          .toList();
-      return list;
+      final data = res.data['data'] as List;
+      return data.map((e) => Item.fromJson(e as Map<String, dynamic>)).toList();
     } catch (e) {
       if (e is DioException) {
         throw (e.response?.data as Map?)?['message'] ?? 'Gagal memuat barang';
+      }
+      rethrow;
+    }
+  }
+
+  Future<List<Category>> getCategories() async {
+    try {
+      final res = await _inventoryDio.get('/categories');
+      final data = res.data['data'] as List;
+      return data.map((e) => Category.fromJson(e as Map<String, dynamic>)).toList();
+    } catch (e) {
+      if (e is DioException) {
+        throw (e.response?.data as Map?)?['message'] ?? 'Gagal memuat kategori';
       }
       rethrow;
     }

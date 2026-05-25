@@ -1,0 +1,25 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "inspiring-rite-489103-t0",
+          "appId": "1:805566040091:android:eaf2a4818a10c7e54690be",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "inspiring-rite-489103-t0",
+          "configurations": {
+            "android": "1:805566040091:android:eaf2a4818a10c7e54690be",
+            "ios": "1:805566040091:ios:a3b9d85cda7f7f9e4690be",
+            "macos": "1:805566040091:ios:a3b9d85cda7f7f9e4690be",
+            "web": "1:805566040091:web:578d40a990165e374690be",
+            "windows": "1:805566040091:web:f1bfca57226eb7ee4690be"
+          }
+        }
+      }
+    }
+  }
+}
