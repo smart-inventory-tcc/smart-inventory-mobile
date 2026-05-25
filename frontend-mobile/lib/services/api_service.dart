@@ -11,7 +11,7 @@ const _inventoryBaseUrl =
     'https://inventory-service-805566040091.asia-southeast2.run.app';
 
 // Ganti dengan IP WiFi laptop saat testing di HP fisik
-const _localBaseUrl = 'http://10.200.121.211:3000';
+const _localBaseUrl = 'http://192.168.100.37:3000';
 
 const _tokenKey = 'smart_inv_jwt';
 
@@ -73,8 +73,6 @@ class ApiService {
 
   Future<void> clearToken() => _storage.delete(key: _tokenKey);
 
-  
-
   // ── Auth — Identity Service ───────────────────────────────────────────────
 
   /// Login — Response: { data: { token, user: { id, username, role } } }
@@ -100,21 +98,6 @@ class ApiService {
     }
   }
 
-  /// Register — Response: { data: { id, username, role } }
-  /// Throws String error message on failure.
-  Future<void> register(String username, String password, String role) async {
-    try {
-      await _identityDio.post(
-        '/auth/register',
-        data: {'username': username, 'password': password, 'role': role},
-      );
-    } catch (e) {
-      if (e is DioException) {
-        throw (e.response?.data as Map?)?['message'] ?? 'Pendaftaran gagal';
-      }
-      rethrow;
-    }
-  }
 
   /// Get Profile — Response: { data: { id, username, role, createdAt } }
   /// Throws String error message on failure.

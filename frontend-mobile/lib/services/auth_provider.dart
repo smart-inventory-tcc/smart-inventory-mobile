@@ -49,20 +49,6 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     }
   }
 
-  /// Register — set AsyncLoading → daftar → auto-login → AsyncData(user)
-  Future<void> registerAction(
-      String username, String password, String role) async {
-    state = const AsyncLoading();
-    try {
-      await _api.register(username, password, role);
-      // Auto-login setelah register berhasil
-      await _api.login(username, password);
-      final user = await _api.getProfile();
-      state = AsyncData(user);
-    } catch (e, st) {
-      state = AsyncError(e, st);
-    }
-  }
 
   /// Logout — hapus token dan reset ke null
   Future<void> logout() async {

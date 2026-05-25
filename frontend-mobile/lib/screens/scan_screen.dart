@@ -273,6 +273,10 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // Gambar produk
+                            _buildProductImage(item.imageUrl, cs),
+                            if (item.imageUrl?.isNotEmpty == true)
+                              const SizedBox(height: 10),
                             Text(item.name, style: tt.titleMedium),
                             const SizedBox(height: 8),
                             _infoRow('Barcode', item.barcode, cs),
@@ -350,6 +354,49 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // ── Widget gambar produk untuk panel scan ─────────────────────────────────
+
+  Widget _buildProductImage(String? url, ColorScheme cs) {
+    final src = url?.trim() ?? '';
+    if (src.isEmpty) return const SizedBox.shrink();
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: SizedBox(
+        height: 140,
+        width: double.infinity,
+        child: Image.network(
+          src,
+          fit: BoxFit.cover,
+          loadingBuilder: (ctx, child, progress) {
+            if (progress == null) return child;
+            return Container(
+              color: cs.surfaceContainerHighest,
+              child: Center(
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: cs.primary,
+                  value: progress.expectedTotalBytes != null
+                      ? progress.cumulativeBytesLoaded /
+                          progress.expectedTotalBytes!
+                      : null,
+                ),
+              ),
+            );
+          },
+          errorBuilder: (ctx, err, stack) => Container(
+            color: cs.surfaceContainerHighest,
+            child: Icon(
+              Icons.image_not_supported_outlined,
+              size: 36,
+              color: cs.onSurface.withValues(alpha: 0.3),
+            ),
+          ),
+        ),
       ),
     );
   }

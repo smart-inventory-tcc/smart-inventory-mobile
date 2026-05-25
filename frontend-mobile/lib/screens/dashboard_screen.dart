@@ -277,28 +277,8 @@ class _ItemCard extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
           children: [
-            // Stok badge
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: isLow
-                    ? const Color(0xFFFF8C00).withValues(alpha: 0.15)
-                    : cs.primary.withValues(alpha: 0.13),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Center(
-                child: Text(
-                  '${item.stock}',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    color: isLow ? const Color(0xFFFF8C00) : cs.primary,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
+            // Gambar produk (dengan fallback ikon jika kosong/error)
+            _ProductImage(url: item.imageUrl, isLow: isLow, cs: cs),
 
             // Info barang
             Expanded(
@@ -371,3 +351,68 @@ class _ItemCard extends StatelessWidget {
   }
 }
 
+// ── Product Image thumbnail ───────────────────────────────────────────────────
+class _ProductImage extends StatelessWidget {
+  final String? url;
+  final bool isLow;
+  final ColorScheme cs;
+
+  const _ProductImage({required this.url, required this.isLow, required this.cs});
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor =
+        isLow ? const Color(0xFFFF8C00) : cs.primary.withValues(alpha: 0.3);
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 12),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            border: Border.all(color: borderColor, width: 1.5),
+            borderRadius: BorderRadius.circular(10),
+            color: cs.surfaceContainerHighest,
+          ),
+          child: _buildImage(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImage() {
+    final src = url?.trim() ?? '';
+    if (src.isEmpty) return _fallback();
+
+    return Image.network(
+      src,
+      fit: BoxFit.cover,
+      loadingBuilder: (ctx, child, progress) {
+        if (progress == null) return child;
+        return Center(
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              value: progress.expectedTotalBytes != null
+                  ? progress.cumulativeBytesLoaded /
+                      progress.expectedTotalBytes!
+                  : null,
+              color: cs.primary,
+            ),
+          ),
+        );
+      },
+      errorBuilder: (ctx, err, stack) => _fallback(),
+    );
+  }
+
+  Widget _fallback() => Icon(
+        Icons.image_not_supported_outlined,
+        size: 26,
+        color: cs.onSurface.withValues(alpha: 0.3),
+      );
+}
